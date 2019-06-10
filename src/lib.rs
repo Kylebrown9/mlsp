@@ -4,121 +4,142 @@ use core::sync::atomic;
 use core::marker::PhantomData;
 
 use std::boxed::Box;
-use std::mem;
 use std::sync::atomic::AtomicUsize;
 
 use std::sync::atomic::Ordering;
 
-pub struct Mlsp<T: ?Sized> {
-    local_count: *mut usize,
-    atomic_count: *mut AtomicUsize,
-    
-    ptr: *mut T,
-
-    phantom: PhantomData<T>
+struct Packet<T> {
+    atomic_count: AtomicUsize,
+    value: T
 }
 
-pub struct MlspPackage<T: ?Sized> {
-    atomic_count: *mut AtomicUsize,
-    
-    ptr: *mut T,
+pub struct Mlsp<T> {
+    phantom: PhantomData<T>,
+    local_count: *mut Cell<usize>,
+    packet_ptr: *mut Packet<T>
+}
 
-    phantom: PhantomData<T>
+pub struct MlspPackage<T> {
+    phantom: PhantomData<T>,
+    packet_ptr: *mut Packet<T>
+}
+
+impl<T> Packet<T> {
+    fn new(value: T) -> Self {
+        Packet {
+            atomic_count: AtomicUsize::new(1),
+            value: value
+        }
+    }
+
+    fn increment(packet: *const Packet<T>) -> usize {
+        unsafe {
+            let old = (*packet).atomic_count.fetch_add(1, Ordering::Release);
+            atomic::fence(Ordering::Acquire);
+            old
+        }
+    }
+
+    fn decrement(packet: *const Packet<T>) -> usize {
+        unsafe {
+            let old = (*packet).atomic_count.fetch_sub(1, Ordering::Release);
+            atomic::fence(Ordering::Acquire);
+            old
+        }
+    }
+
+    fn get(&self) -> &T {
+        &self.value
+    }
 }
 
 impl<T> Mlsp<T> {
     pub fn new(value: T) -> Self {
-        let local_count_cell = Cell::new(0);
-        let atomic_count_cell = Cell::new(AtomicUsize::new(0));
+        Mlsp {
+            phantom: PhantomData,
+            local_count: Box::into_raw(Box::new(Cell::new(1))),
+            packet_ptr: Box::into_raw(Box::new(Packet::new(value)))
+        }
+    }
 
-        let output = Mlsp {
-            local_count: local_count_cell.as_ptr(),
-            atomic_count: atomic_count_cell.as_ptr(),
-
-            ptr: Box::into_raw(Box::new(value)),
-
-            phantom: PhantomData
-        };
-
-        mem::forget(local_count_cell);
-        mem::forget(atomic_count_cell);
-
-        output
+    pub fn get(&self) -> &T {
+        unsafe {
+            (*self.packet_ptr).get()
+        }
     }
 
     pub fn package(&self) -> MlspPackage<T> {
-        unsafe {
-            (*self.atomic_count).fetch_add(1, Ordering::Release);
-        }
-
-        atomic::fence(Ordering::Acquire);
+        Packet::increment(self.packet_ptr);
 
         MlspPackage {
-            atomic_count: self.atomic_count,
-
-            ptr: self.ptr,
-
-            phantom: PhantomData
+            phantom: PhantomData,
+            packet_ptr: self.packet_ptr
         }
     }
 }
 
 impl<T> MlspPackage<T> {
     pub fn unpackage(self) -> Mlsp<T> {
-        let local_count_cell = Cell::new(0);
-
-        let output = Mlsp {
-            local_count: local_count_cell.as_ptr(),
-            atomic_count: self.atomic_count,
-
-            ptr: self.ptr,
-
-            phantom: PhantomData
-        };
-
-        mem::forget(local_count_cell);
-
-        output
+        Mlsp {
+            phantom: PhantomData,
+            local_count: Box::into_raw(Box::new(Cell::new(1))),
+            packet_ptr: self.packet_ptr
+        }
     }
 }
 
-impl<T: ?Sized> Drop for Mlsp<T> {
+impl<T> Drop for Mlsp<T> {
     fn drop(&mut self) {
         unsafe {
-            *self.local_count -= 1;
+            // Decrement the local_count
+            let count = (*self.local_count).get();
+            let count = count - 1;
+            (*self.local_count).set(count);
 
-            if *self.local_count != 0 {
+            // If the new value is greater than zero the drop is complete
+            if count > 0 {
                 return;
             }
 
-            let last_atomic_count = (*self.atomic_count).fetch_sub(1, Ordering::Release);
+            // If the local_count was reduced to zero, then the atomic_count must be decremented
+            let last_atomic_count = Packet::decrement(self.packet_ptr);
+
+            if last_atomic_count == 1 {
+                // drop the wrapped value
+                ptr::drop_in_place(self.packet_ptr);
+            }
+        }
+    }
+}
+
+impl<T> Drop for MlspPackage<T> {
+    fn drop(&mut self) {
+        unsafe {
+            let last_atomic_count = Packet::decrement(self.packet_ptr);
 
             atomic::fence(Ordering::Acquire);
 
             if last_atomic_count == 1 {
-                // destroy the contained object
-                ptr::drop_in_place(self.ptr);
+                // drop the wrapped value
+                ptr::drop_in_place(self.packet_ptr);
             }
         }
     }
 }
 
-impl<T: ?Sized> Clone for Mlsp<T> {
+impl<T> Clone for Mlsp<T> {
     fn clone(&self) -> Self {
         unsafe {
-            *self.local_count += 1;
+            let count = (*self.local_count).get();
+            let count = count + 1;
+            (*self.local_count).set(count);
         }
 
-        let output = Mlsp {
+        Mlsp {
+            phantom: PhantomData,
             local_count: self.local_count,
-            atomic_count: self.atomic_count,
-
-            ptr: self.ptr,
-
-            phantom: PhantomData
-        };
-
-        output
+            packet_ptr: self.packet_ptr
+        }
     }
 }
 
@@ -126,13 +147,16 @@ impl<T: ?Sized> Clone for Mlsp<T> {
 mod tests {
     use super::*;
 
-    enum DropMock {
-        
-    }
-
     #[test]
     fn local_sharing() {
         let a = Mlsp::new(1u8);
         let b = a.clone();
+        let c = b.clone();
+
+        let d = c.package();
+        let _d2 = d.unpackage();
+
+        let e = c.package();
+        let _e2 = e.unpackage();
     }
 }
