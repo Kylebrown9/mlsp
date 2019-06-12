@@ -1,89 +1,121 @@
 use core::cell::Cell;
 use core::ptr;
 use core::sync::atomic;
-use core::marker::PhantomData;
 
+use std::borrow::Borrow;
 use std::boxed::Box;
 use std::sync::atomic::AtomicUsize;
 
 use std::sync::atomic::Ordering;
 
-struct Packet<T> {
+/// The inner Arc-like portion of the Mlsp
+/// It is a wrapper tha bundles an atomic usize reference counter
+/// with an arbitrary value
+struct MlspData<T> {
     atomic_count: AtomicUsize,
     value: T
 }
 
-pub struct Mlsp<T> {
-    phantom: PhantomData<T>,
-    local_count: *mut Cell<usize>,
-    packet_ptr: *mut Packet<T>
-}
-
-pub struct MlspPackage<T> {
-    phantom: PhantomData<T>,
-    packet_ptr: *mut Packet<T>
-}
-
-impl<T> Packet<T> {
+impl<T> MlspData<T> {
+    /// Creates a new data bundle with an atomic counter with value 1
     fn new(value: T) -> Self {
-        Packet {
+        MlspData {
             atomic_count: AtomicUsize::new(1),
             value: value
         }
     }
 
-    fn increment(packet: *const Packet<T>) -> usize {
+    /// Increment the atomic counter for a given MlspData pointer
+    fn increment(data: *const MlspData<T>) -> usize {
         unsafe {
-            let old = (*packet).atomic_count.fetch_add(1, Ordering::Release);
+            let old = (*data).atomic_count.fetch_add(1, Ordering::Release);
             atomic::fence(Ordering::Acquire);
             old
         }
     }
 
-    fn decrement(packet: *const Packet<T>) -> usize {
+    /// Decrement the atomic counter for a given MlspData pointer
+    fn decrement(data: *const MlspData<T>) -> usize {
         unsafe {
-            let old = (*packet).atomic_count.fetch_sub(1, Ordering::Release);
+            let old = (*data).atomic_count.fetch_sub(1, Ordering::Release);
             atomic::fence(Ordering::Acquire);
             old
         }
     }
 
+    /// Get a reference to the inner value
     fn get(&self) -> &T {
         &self.value
     }
 }
 
+/// The Multi-Level Smart Pointer data type
+/// It is a hybrid between Rc and Arc and attempts to reduce the number
+/// of atomic operations performed when it is shared, cloned and dropped
+/// within a thread
+/// 
+/// Mlsp is not Send or Sync by default as sharing between threads needs
+/// to trigger atomic_count modifications.
+/// 
+/// ```compile_fail
+/// use std::thread;
+/// 
+/// let a = Mlsp::new(1u8)
+/// 
+/// thread::spawn(move || {
+///     println!(a.borrow());
+/// })
+/// ```
+/// 
+/// This is done explicitly through the package API
+/// 
+/// ```compile_fail
+/// use std::thread;
+/// 
+/// let a = Mlsp::new(1u8).package()
+/// 
+/// thread::spawn(move || {
+///     println!(a.unpackage().borrow());
+/// })
+/// ```
+pub struct Mlsp<T> {
+    local_count: *mut Cell<usize>,
+    data_ptr: *mut MlspData<T>
+}
+
 impl<T> Mlsp<T> {
+    /// Creates a new Mlsp wrapping the given value with local and atomic
+    /// counts both equal to one
     pub fn new(value: T) -> Self {
         Mlsp {
-            phantom: PhantomData,
             local_count: Box::into_raw(Box::new(Cell::new(1))),
-            packet_ptr: Box::into_raw(Box::new(Packet::new(value)))
+            data_ptr: Box::into_raw(Box::new(MlspData::new(value)))
         }
     }
 
-    pub fn get(&self) -> &T {
-        unsafe {
-            (*self.packet_ptr).get()
-        }
-    }
-
+    /// Create a Send-able package from the Mlsp
+    /// This increments the atomic_count
     pub fn package(&self) -> MlspPackage<T> {
-        Packet::increment(self.packet_ptr);
+        MlspData::increment(self.data_ptr);
 
         MlspPackage {
-            phantom: PhantomData,
-            packet_ptr: self.packet_ptr
+            data_ptr: self.data_ptr
         }
     }
 }
 
-impl<T> MlspPackage<T> {
-    pub fn unpackage(self) -> Mlsp<T> {
-        Mlsp {
-            phantom: PhantomData,
-            local_count: Box::into_raw(Box::new(Cell::new(1))),
-            packet_ptr: self.packet_ptr
+impl<T> Borrow<T> for Mlsp<T> {
+    fn borrow(&self) -> &T {
+        unsafe {
+            (*self.data_ptr).get()
+        }
+    }
+}
+
+impl<T> AsRef<T> for Mlsp<T> {
+    fn as_ref(&self) -> &T {
+        unsafe {
+            (*self.data_ptr).get()
         }
     }
 }
@@ -102,12 +134,25 @@ impl<T> Drop for Mlsp<T> {
             }
 
             // If the local_count was reduced to zero, then the atomic_count must be decremented
-            let last_atomic_count = Packet::decrement(self.packet_ptr);
+            let last_atomic_count = MlspData::decrement(self.data_ptr);
 
             if last_atomic_count == 1 {
                 // drop the wrapped value
-                ptr::drop_in_place(self.packet_ptr);
+                ptr::drop_in_place(self.data_ptr);
             }
+        }
+    }
+}
+
+pub struct MlspPackage<T> {
+    data_ptr: *mut MlspData<T>
+}
+
+impl<T> MlspPackage<T> {
+    pub fn unpackage(self) -> Mlsp<T> {
+        Mlsp {
+            local_count: Box::into_raw(Box::new(Cell::new(1))),
+            data_ptr: self.data_ptr
         }
     }
 }
@@ -115,17 +160,17 @@ impl<T> Drop for Mlsp<T> {
 impl<T> Drop for MlspPackage<T> {
     fn drop(&mut self) {
         unsafe {
-            let last_atomic_count = Packet::decrement(self.packet_ptr);
-
-            atomic::fence(Ordering::Acquire);
+            let last_atomic_count = MlspData::decrement(self.data_ptr);
 
             if last_atomic_count == 1 {
                 // drop the wrapped value
-                ptr::drop_in_place(self.packet_ptr);
+                ptr::drop_in_place(self.data_ptr);
             }
         }
     }
 }
+
+unsafe impl<T> Send for MlspPackage<T> {}
 
 impl<T> Clone for Mlsp<T> {
     fn clone(&self) -> Self {
@@ -136,9 +181,8 @@ impl<T> Clone for Mlsp<T> {
         }
 
         Mlsp {
-            phantom: PhantomData,
             local_count: self.local_count,
-            packet_ptr: self.packet_ptr
+            data_ptr: self.data_ptr
         }
     }
 }
@@ -158,5 +202,31 @@ mod tests {
 
         let e = c.package();
         let _e2 = e.unpackage();
+    }
+
+    #[test]
+    fn cross_thread_sharing() {
+        use std::thread;
+
+        let mlsp = Mlsp::new(1u8);
+
+        let mut children = vec![];
+
+        for _ in 0..10 {
+            let package = mlsp.package();
+
+            children.push(thread::spawn(move || {
+                let shared_mlsp = package.unpackage();
+                let shared_mlsp_clone = shared_mlsp.clone();
+
+                assert_eq!(1u8, *(shared_mlsp.borrow()));
+                assert_eq!(1u8, *(shared_mlsp_clone.borrow()));
+            }));
+        }
+
+        for child in children {
+            // Wait for the thread to finish. Returns a result.
+            let _ = child.join();
+        }
     }
 }
