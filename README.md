@@ -1,28 +1,28 @@
-# Multi-Level Smart Pointer (mlsp)
+# Multi-Level Smart Pointers
 The Multi-Level Smart Pointer uses an atomic global reference counter and per-thread non-atomic reference counters.
 
-The `Mlsp` type does not implement `Send` and cannot be sent between threads, so any clone() and drop() operations performed on it use the local counter (except the last drop in a given thread).
+# Mlsp
+The `Mlsp` type can be used like `Rc` for sharing memory within one thread.
+It does not implement `Send` and cannot be sent between threads, so any clone() and drop() operations performed on it use the local counter (except the last drop in a given thread).
 
 ```rust
-use std::thread;
-
-let a = Mlsp::new(1u8)
+let a = Mlsp::new(1u8);
 
 thread::spawn(move || {
-    println!(a.borrow());
+    let a2 = a; // WILL *NOT* WORK!!!
 })
 ```
 
-To send an `Mlsp` to another thread, it must be packaged creating an `MlspPackage` and incrementing the atomic reference counter.
+# MlspPackage
+To send an `Mlsp` to another thread, you must make an `MlspPackage` which also increments the atomic reference counter.
 The `MlspPackage` type does implement `Send` and is ready to be sent to other threads.
 Receiving threads then use to create a new `Mlsp` with its own local reference counter.
 
 ```rust
-use std::thread;
-
-let a = Mlsp::new(1u8).package()
+let a = Mlsp::new(1u8).package();
 
 thread::spawn(move || {
+    let a2 = a; // Valid because MlspPackage implements Send
     println!("{:?}", a.unpackage().borrow());
 })
 ```
