@@ -1,13 +1,31 @@
-![travis-ci](https://travis-ci.org/Randevelopment/mlsp.svg?branch=master)
-
 # Multi-Level Smart Pointer (mlsp)
-This project supplies an implementation of a Multi-Level Smart Pointer that attempts to bridge the gap between Rc and Arc.
-When data is placed in an Mlsp a global atomic counter and a local non-atomic counter are created.
-This allows us to perform cheaper non-atomic operations when Mlsp operations happen within the same thread.
+The Multi-Level Smart Pointer uses an atomic global reference counter and per-thread non-atomic reference counters.
 
-Mlsp cannot be sent between threads, so any clone() and drop() operations performed on it use the local counter (except the last drop in a given thread).
-When an Mlsp needs to be sent to another thread you must create a MlspPackage from it using the package method.
-Creating and dropping packages increments and decrements the global counter and packages can be made into Mlsp's without affecting the global counter.
+The `Mlsp` type does not implement `Send` and cannot be sent between threads, so any clone() and drop() operations performed on it use the local counter (except the last drop in a given thread).
+
+```rust
+use std::thread;
+
+let a = Mlsp::new(1u8)
+
+thread::spawn(move || {
+    println!(a.borrow());
+})
+```
+
+To send an `Mlsp` to another thread, it must be packaged creating an `MlspPackage` and incrementing the atomic reference counter.
+The `MlspPackage` type does implement `Send` and is ready to be sent to other threads.
+Receiving threads then use to create a new `Mlsp` with its own local reference counter.
+
+```rust
+use std::thread;
+
+let a = Mlsp::new(1u8).package()
+
+thread::spawn(move || {
+    println!("{:?}", a.unpackage().borrow());
+})
+```
 
 # Benchmarking and Testing
 This library is still in need of extensive benchmarking and testing to demonstrate that it is robust and effective.

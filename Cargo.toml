@@ -2,6 +2,4 @@
 name = "mlsp"
 version = "0.1.0"
 authors = ["kyleb <kylebrw@gmail.com>"]
-edition = "2018"
-
-[dependencies]
+edition = "2021"
