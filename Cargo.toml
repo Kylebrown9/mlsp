@@ -5,6 +5,7 @@ authors = ["kyleb <kylebrw@gmail.com>"]
 edition = "2021"
 license = "MIT"
 description = "Mlsp is a small library for smart pointers that use both thread local and global atomic counters"
+repository = "https://github.com/Kylebrown9/mlsp"
 
 [dev-dependencies]
 rand = "0.8.4"
