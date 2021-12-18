@@ -1,6 +1,7 @@
 ![crates.io](https://img.shields.io/crates/v/mlsp.svg)
-[![Continuous Integration](https://github.com/Kylebrown9/mlsp/actions/workflows/ci.yml/badge.svg)](https://github.com/Kylebrown9/mlsp/actions/workflows/ci.yml)
+![crates.io](https://img.shields.io/crates/l/mlsp)
 [![Project Type: Toy](https://img.shields.io/badge/project%20type-toy-blue)](https://project-types.github.io/#toy)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/Kylebrown9/mlsp/Continuous%20Integration)
 
 # Multi-Level Smart Pointers
 The Multi-Level Smart Pointer uses an atomic global reference counter and per-thread non-atomic reference counters.
