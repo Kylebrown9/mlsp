@@ -1,5 +1,10 @@
+<a href="https://project-types.github.io/#toy">
+  <img src="https://img.shields.io/badge/project%20type-toy-blue" alt="Toy Badge"/>
+</a>
+
 # Multi-Level Smart Pointers
 The Multi-Level Smart Pointer uses an atomic global reference counter and per-thread non-atomic reference counters.
+The goal is that an MLSP should outperform a purely-atomicly counted smart pointer when enough local copies are performed.
 
 # Mlsp
 The `Mlsp` type can be used like `Rc` for sharing memory within one thread.
