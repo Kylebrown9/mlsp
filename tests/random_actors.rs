@@ -5,11 +5,11 @@
 use mlsp::{Mlsp, MlspPackage};
 use rand::Rng;
 
-use std::thread::{self, JoinHandle};
 use std::thread::sleep;
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use std::{sync::mpsc, borrow::Borrow, num::Wrapping};
+use std::{borrow::Borrow, num::Wrapping, sync::mpsc};
 
 #[test]
 fn random_actors() {
@@ -34,14 +34,15 @@ fn random_actors() {
     println!("Phase: Starting All Actors");
     let join_handles: Vec<JoinHandle<_>> = actors
         .into_iter()
-        .map(|actor|
-            thread::spawn(|| actor.run())
-        ).collect();
+        .map(|actor| thread::spawn(|| actor.run()))
+        .collect();
 
     // Send Share messages
     println!("Phase: Sending Initial Messages");
     for sender in senders.iter() {
-        let _ = sender.send(Message::Share(Mlsp::new(Wrapping(rand::random())).package()));
+        let _ = sender.send(Message::Share(
+            Mlsp::new(Wrapping(rand::random())).package(),
+        ));
     }
 
     sleep(Duration::from_secs(5));
@@ -60,14 +61,14 @@ fn random_actors() {
 
 enum Message {
     Kill,
-    Share(MlspPackage<Wrapping<u32>>)
+    Share(MlspPackage<Wrapping<u32>>),
 }
 
 struct DummyActor {
     id: u32,
     receiver: mpsc::Receiver<Message>,
     senders: Vec<mpsc::Sender<Message>>,
-    sum: Wrapping<u32>
+    sum: Wrapping<u32>,
 }
 
 impl DummyActor {
@@ -76,7 +77,7 @@ impl DummyActor {
             id,
             receiver,
             senders: vec![],
-            sum: Wrapping(1)
+            sum: Wrapping(1),
         }
     }
 
@@ -100,12 +101,15 @@ impl DummyActor {
                     Message::Kill => {
                         println!("Actor {}: Received Kill message", self.id);
                         break;
-                    },
+                    }
                     Message::Share(package) => {
                         let new_mlsp = package.unpackage();
                         let contents: &Wrapping<u32> = new_mlsp.borrow();
                         let contents: Wrapping<u32> = *contents;
-                        println!("Actor {}: Received a message with contents: {}", self.id, contents);
+                        println!(
+                            "Actor {}: Received a message with contents: {}",
+                            self.id, contents
+                        );
 
                         // Add to list of pointers
                         pointers.push(new_mlsp.clone());
@@ -115,8 +119,7 @@ impl DummyActor {
 
                         let value = if rng.gen_range(0..100) < 80 {
                             new_mlsp.package()
-                        }
-                        else {
+                        } else {
                             Mlsp::new(self.sum).package()
                         };
                         for _ in 0..2 {
@@ -126,8 +129,7 @@ impl DummyActor {
                         }
                     }
                 }
-            }
-            else {
+            } else {
                 println!("Actor {}: No input", self.id);
             }
         }
