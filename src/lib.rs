@@ -51,8 +51,6 @@ impl<T> MlspInner<T> {
     }
 }
 
-/// Multi-Level Smart Pointer
-///
 /// A hybrid between Rc and Arc that attempts to reduce the number
 /// of atomic operations performed when it is shared, cloned and dropped
 /// within a thread.
@@ -82,8 +80,9 @@ pub struct Mlsp<T> {
 }
 
 impl<T> Mlsp<T> {
-    /// Creates a new Mlsp wrapping the given value with local and atomic
-    /// counts both equal to one
+    /// Creates a new Mlsp wrapping the given value.
+    ///
+    /// Initializes the global and local counts to 1.
     pub fn new(data: T) -> Self {
         let atomic_counter = Box::new(MlspInner::new(data));
         let atomic_counter = Box::into_raw(atomic_counter);
@@ -96,8 +95,10 @@ impl<T> Mlsp<T> {
     }
 
     /// Create a Send-able package from the Mlsp
+    ///
     /// This increments the atomic_count
     pub fn package(&self) -> MlspPackage<T> {
+        // Adding a new referent to the inner requires incrementing its counter
         unsafe {
             self.inner_ptr.as_ref().increment();
         }
@@ -122,13 +123,14 @@ impl<T> AsRef<T> for Mlsp<T> {
 
 impl<T> Clone for Mlsp<T> {
     fn clone(&self) -> Self {
-        unsafe {
-            let local_count = self.local_count.as_ref();
+        // SAFETY: Requires that local_count has not been freed.
+        // This is guaranteed by the existence of the current Mlsp.
+        let local_count = unsafe { self.local_count.as_ref() };
 
-            let count = local_count.get();
-            let count = count + 1;
-            local_count.set(count);
-        }
+        // Increment the local counter
+        let count = local_count.get();
+        let count = count + 1;
+        local_count.set(count);
 
         Mlsp {
             local_count: self.local_count,
