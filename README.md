@@ -4,7 +4,7 @@
 
 # Multi-Level Smart Pointers
 The Multi-Level Smart Pointer uses an atomic global reference counter and per-thread non-atomic reference counters.
-The goal is that an MLSP should outperform a purely-atomicly counted smart pointer when enough local copies are performed.
+The goal is that an MLSP should outperform a purely-atomically counted smart pointer when enough local copies are performed.
 
 # Mlsp
 The `Mlsp` type can be used like `Rc` for sharing memory within one thread.
