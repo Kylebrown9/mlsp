@@ -1,5 +1,5 @@
-![crates.io](https://img.shields.io/crates/v/mlsp.svg)
-![crates.io](https://img.shields.io/crates/l/mlsp)
+[![crates.io](https://img.shields.io/crates/v/mlsp.svg)](https://crates.io/crates/mlsp)
+[![crates.io](https://img.shields.io/crates/l/mlsp)](https://choosealicense.com/licenses/mit/)
 [![Project Type: Toy](https://img.shields.io/badge/project%20type-toy-blue)](https://project-types.github.io/#toy)
 ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/Kylebrown9/mlsp/Continuous%20Integration)
 
