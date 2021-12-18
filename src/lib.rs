@@ -244,6 +244,7 @@ mod tests {
         // Convince clippy that we need these values
         drop(c);
         drop(b);
+        drop(a);
     }
 
     #[test]
