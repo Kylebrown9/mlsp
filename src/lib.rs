@@ -64,10 +64,10 @@ impl<T> MlspData<T> {
 /// Mlsp cannot be sent between threads.
 /// ```compile_fail
 /// use std::thread;
-/// let a = Mlsp::new(1u8)
+/// let a = mlsp::Mlsp::new(1u8);
 /// thread::spawn(move || {
-///     println!(a.borrow());
-/// })
+///     let a2 = a;
+/// });
 /// ```
 /// 
 /// To send across thread boundaries, first package using the `package()` method
