@@ -1,6 +1,6 @@
-<a href="https://project-types.github.io/#toy">
-  <img src="https://img.shields.io/badge/project%20type-toy-blue" alt="Toy Badge"/>
-</a>
+![crates.io](https://img.shields.io/crates/v/mlsp.svg)
+[![Continuous Integration](https://github.com/Kylebrown9/mlsp/actions/workflows/ci.yml/badge.svg)](https://github.com/Kylebrown9/mlsp/actions/workflows/ci.yml)
+[![Project Type: Toy](https://img.shields.io/badge/project%20type-toy-blue)](https://project-types.github.io/#toy)
 
 # Multi-Level Smart Pointers
 The Multi-Level Smart Pointer uses an atomic global reference counter and per-thread non-atomic reference counters.
