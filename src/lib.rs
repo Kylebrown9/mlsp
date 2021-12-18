@@ -240,6 +240,10 @@ mod tests {
 
         let e = c.package();
         let _e2 = e.unpackage();
+
+        // Convince clippy that we need these values
+        drop(c);
+        drop(b);
     }
 
     #[test]
