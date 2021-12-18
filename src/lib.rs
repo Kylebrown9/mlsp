@@ -13,7 +13,7 @@ use std::sync::atomic::Ordering;
 /// with an arbitrary value
 struct MlspInner<T> {
     atomic_count: atomic::AtomicUsize,
-    data: T
+    data: T,
 }
 
 impl<T> MlspInner<T> {
@@ -21,12 +21,12 @@ impl<T> MlspInner<T> {
     fn new(data: T) -> Self {
         MlspInner {
             atomic_count: atomic::AtomicUsize::new(1),
-            data
+            data,
         }
     }
 
     /// Increment the atomic counter for a given MlspInner pointer
-    /// 
+    ///
     /// # Safety
     /// A caller to increment is obligated to later call decrement exactly once,
     /// in order to ensure that the memory it contains is not leaked.
@@ -35,12 +35,11 @@ impl<T> MlspInner<T> {
     }
 
     /// Decrement the atomic counter for a given MlspInner pointer
-    /// 
+    ///
     /// # Safety
     /// For each call to decrement there must have been exactly one
     /// prior call to increment to prevent premature freeing.
     unsafe fn decrement(&mut self) {
-
         let old = self.atomic_count.fetch_sub(1, Ordering::Release);
         atomic::fence(Ordering::Acquire);
 
@@ -53,11 +52,11 @@ impl<T> MlspInner<T> {
 }
 
 /// Multi-Level Smart Pointer
-/// 
+///
 /// A hybrid between Rc and Arc that attempts to reduce the number
 /// of atomic operations performed when it is shared, cloned and dropped
 /// within a thread.
-/// 
+///
 /// Mlsp cannot be sent between threads.
 /// ```compile_fail
 /// # use std::thread;
@@ -66,7 +65,7 @@ impl<T> MlspInner<T> {
 ///     let a2 = a;
 /// });
 /// ```
-/// 
+///
 /// To send across thread boundaries, first package using the `package()` method
 /// and send the resulting package.
 /// ```
@@ -79,7 +78,7 @@ impl<T> MlspInner<T> {
 /// ```
 pub struct Mlsp<T> {
     local_count: NonNull<Cell<usize>>,
-    inner_ptr: NonNull<MlspInner<T>>
+    inner_ptr: NonNull<MlspInner<T>>,
 }
 
 impl<T> Mlsp<T> {
@@ -92,7 +91,7 @@ impl<T> Mlsp<T> {
 
         Mlsp {
             local_count: new_local_counter(),
-            inner_ptr: atomic_counter
+            inner_ptr: atomic_counter,
         }
     }
 
@@ -104,24 +103,20 @@ impl<T> Mlsp<T> {
         }
 
         MlspPackage {
-            inner_ptr: self.inner_ptr
+            inner_ptr: self.inner_ptr,
         }
     }
 }
 
 impl<T> Borrow<T> for Mlsp<T> {
     fn borrow(&self) -> &T {
-        unsafe {
-            &self.inner_ptr.as_ref().data
-        }
+        unsafe { &self.inner_ptr.as_ref().data }
     }
 }
 
 impl<T> AsRef<T> for Mlsp<T> {
     fn as_ref(&self) -> &T {
-        unsafe {
-            &self.inner_ptr.as_ref().data
-        }
+        unsafe { &self.inner_ptr.as_ref().data }
     }
 }
 
@@ -137,14 +132,14 @@ impl<T> Clone for Mlsp<T> {
 
         Mlsp {
             local_count: self.local_count,
-            inner_ptr: self.inner_ptr
+            inner_ptr: self.inner_ptr,
         }
     }
 }
 
 impl<T> Drop for Mlsp<T> {
     fn drop(&mut self) {
-        // SAFETY: Requires that two `Mlsp`s for the same inner data must never exist in different threads 
+        // SAFETY: Requires that two `Mlsp`s for the same inner data must never exist in different threads
         unsafe {
             let local_count = self.local_count.as_mut();
             // Decrement the local_count
@@ -174,7 +169,7 @@ impl<T> Drop for Mlsp<T> {
 /// A reference to the contents of an Mlsp
 /// that does not yet have a local counter and can be sent across threads.
 pub struct MlspPackage<T> {
-    inner_ptr: NonNull<MlspInner<T>>
+    inner_ptr: NonNull<MlspInner<T>>,
 }
 
 impl<T> MlspPackage<T> {
@@ -183,7 +178,7 @@ impl<T> MlspPackage<T> {
     pub fn unpackage(self) -> Mlsp<T> {
         Mlsp {
             local_count: new_local_counter(),
-            inner_ptr: self.inner_ptr
+            inner_ptr: self.inner_ptr,
         }
     }
 }
@@ -207,11 +202,10 @@ impl<T> Clone for MlspPackage<T> {
         }
 
         MlspPackage {
-            inner_ptr: self.inner_ptr
+            inner_ptr: self.inner_ptr,
         }
     }
 }
-
 
 fn new_local_counter() -> NonNull<Cell<usize>> {
     // Allocate the counter as a boxed cell
@@ -223,7 +217,6 @@ fn new_local_counter() -> NonNull<Cell<usize>> {
 
     local_counter
 }
-
 
 #[cfg(test)]
 mod tests {
