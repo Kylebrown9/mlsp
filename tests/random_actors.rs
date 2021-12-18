@@ -119,7 +119,7 @@ impl DummyActor {
                         else {
                             Mlsp::new(self.sum).package()
                         };
-                        for _ in 0..1 {
+                        for _ in 0..2 {
                             let choice = rng.gen_range(0..self.senders.len());
                             let _ = self.senders[choice].send(Message::Share(value.clone()));
                             println!("Actor {}: Sent message to {}", self.id, choice);

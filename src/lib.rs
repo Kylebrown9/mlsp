@@ -72,6 +72,14 @@ impl<T> MlspData<T> {
 /// 
 /// To send across thread boundaries, first package using the `package()` method
 /// and send the resulting package.
+/// ```
+/// use std::thread;
+/// let a = mlsp::Mlsp::new(1u8);
+/// let a_pkg = a.package();
+/// thread::spawn(move || {
+///     let a2 = a_pkg.unpackage();
+/// });
+/// ```
 pub struct Mlsp<T> {
     local_count: *mut Cell<usize>,
     data_ptr: *mut MlspData<T>

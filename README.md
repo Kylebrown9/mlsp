@@ -10,7 +10,7 @@ The goal is that an MLSP should outperform a purely-atomicly counted smart point
 The `Mlsp` type can be used like `Rc` for sharing memory within one thread.
 It does not implement `Send` and cannot be sent between threads, so any `clone()` and `drop()` operations performed on it use the local counter (except the last drop in a given thread).
 
-The benefit of an `Mlsp` over an `Rc` is that repackaging it to share to another thread does not require copying or moving the underlying data, it is already being stored in a way and with a counter that can be used to share between threads.
+The benefit of an `Mlsp` over an `Rc` is that repackaging it to share it with another thread does not require copying or moving the underlying data, it is already being stored in a way and with a counter that can be used to share between threads.
 
 # MlspPackage
 To send an `Mlsp` to another thread, you must make an `MlspPackage`.
